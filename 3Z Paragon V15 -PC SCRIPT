@@ -1,0 +1,1084 @@
+--[[ 
+    w698 PARAGON V15 — FPS BOOST EDITION
+    * Added: 3-Tier FPS Boost (Low/Mid/High End PCs)
+    * Added: Custom FOV Input (60-175) with Keyboard Support
+    * Fixed: All previous bugs + new features integrated
+    * Academic Project — Educational Demonstration Only
+]]
+
+--// Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local UserSettings = UserSettings()
+local GameSettings = UserSettings:GetService("UserGameSettings")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+--// Validate Services
+if not LocalPlayer or not Camera or not GameSettings then
+    error("Critical services failed")
+    return
+end
+
+--// Settings
+local Settings = {
+    Enabled = true,
+    Key = Enum.KeyCode.P,
+    FOV = 150,
+    ShowFOV = true,
+    Smoothing = 0.08,
+    Prediction = 0.165,
+    TeamCheck = true,
+    MaxDistance = 1500,
+    Visuals = {
+        Boxes = true, Outlines = true, Skeletons = true,
+        HealthBar = true, Names = true, Distance = true
+    },
+    FPSBoost = {
+        Enabled = false,
+        Level = "Medium", -- "Low" | "Medium" | "High"
+        OriginalSettings = {} -- للاستعادة
+    },
+    Security = {
+        MaxAttempts = 3,
+        LockoutTime = 30,
+        AdminKey = "mybestscriptever"
+    }
+}
+
+--// FPS Boost Presets (3 Tiers)
+local FPSPresets = {
+    Low = { -- أجهزة ضعيفة (أقصى أداء)
+        Name = "Low-End PC",
+        Description = "Maximum performance, minimal visuals",
+        GraphicsMode = Enum.GraphicsMode.Automatic,
+        RenderDistance = 100,
+        Shadows = false,
+        TextureQuality = Enum.MeshPartHeadsAndAccessories.Enabled,
+        ParticleQuality = Enum.ParticleQuality.Low,
+        AntiAliasing = false,
+        VSync = false,
+        FrameRateCap = 0, -- Unlimited
+        Lighting = {
+            GlobalShadows = false,
+            Technology = Enum.Technology.Compatibility,
+            Brightness = 2,
+            Ambient = Color3.new(0.5, 0.5, 0.5)
+        }
+    },
+    Medium = { -- أجهزة متوسطة (توازن)
+        Name = "Mid-Range PC",
+        Description = "Balanced performance and visuals",
+        GraphicsMode = Enum.GraphicsMode.Automatic,
+        RenderDistance = 500,
+        Shadows = true,
+        TextureQuality = Enum.MeshPartHeadsAndAccessories.Enabled,
+        ParticleQuality = Enum.ParticleQuality.Medium,
+        AntiAliasing = true,
+        VSync = true,
+        FrameRateCap = 120,
+        Lighting = {
+            GlobalShadows = true,
+            Technology = Enum.Technology.ShadowMap,
+            Brightness = 1,
+            Ambient = Color3.new(0.3, 0.3, 0.3)
+        }
+    },
+    High = { -- أجهزة قوية (أقصى جودة)
+        Name = "High-End PC",
+        Description = "Maximum visuals, unlocked performance",
+        GraphicsMode = Enum.GraphicsMode.Automatic,
+        RenderDistance = 1000,
+        Shadows = true,
+        TextureQuality = Enum.MeshPartHeadsAndAccessories.Enabled,
+        ParticleQuality = Enum.ParticleQuality.High,
+        AntiAliasing = true,
+        VSync = false, -- Off for competitive
+        FrameRateCap = 240,
+        Lighting = {
+            GlobalShadows = true,
+            Technology = Enum.Technology.Future,
+            Brightness = 1,
+            Ambient = Color3.new(0.2, 0.2, 0.2)
+        }
+    }
+}
+
+--// State
+local ESPObjects = {}
+local PlayerConnections = {}
+local Whitelisted = false
+local ScriptEnabled = true
+local OriginalFPSSettings = {}
+
+--// Save Original Settings (for restore)
+local function SaveOriginalSettings()
+    OriginalFPSSettings.GraphicsMode = GameSettings.GraphicsMode
+    OriginalFPSSettings.RenderDistance = GameSettings.RenderDistance
+    OriginalFPSSettings.VSync = GameSettings.VSync
+    OriginalFPSSettings.MasterVolume = GameSettings.MasterVolume
+    
+    OriginalFPSSettings.GlobalShadows = Lighting.GlobalShadows
+    OriginalFPSSettings.Technology = Lighting.Technology
+    OriginalFPSSettings.Brightness = Lighting.Brightness
+    OriginalFPSSettings.Ambient = Lighting.Ambient
+end
+
+--// Apply FPS Boost
+local function ApplyFPSBoost(level)
+    if not level or not FPSPresets[level] then
+        warn("Invalid FPS Boost level:", level)
+        return
+    end
+    
+    local preset = FPSPresets[level]
+    Settings.FPSBoost.Level = level
+    Settings.FPSBoost.Enabled = true
+    
+    -- Apply GameSettings (pcall for safety)
+    pcall(function()
+        GameSettings.GraphicsMode = preset.GraphicsMode
+        GameSettings.RenderDistance = preset.RenderDistance
+        GameSettings.VSync = preset.VSync
+    end)
+    
+    -- Apply Lighting settings
+    pcall(function()
+        Lighting.GlobalShadows = preset.Lighting.GlobalShadows
+        Lighting.Technology = preset.Lighting.Technology
+        Lighting.Brightness = preset.Lighting.Brightness
+        Lighting.Ambient = preset.Lighting.Ambient
+    end)
+    
+    -- Optimize workspace (remove decorative parts)
+    pcall(function()
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("ParticleEmitter") or obj:IsA("Trail") then
+                if preset.ParticleQuality == Enum.ParticleQuality.Low then
+                    obj.Rate = 0
+                elseif preset.ParticleQuality == Enum.ParticleQuality.Medium then
+                    obj.Rate = obj.Rate * 0.5
+                end
+            end
+            if obj:IsA("Decal") or obj:IsA("Texture") then
+                if level == "Low" then
+                    obj.Transparency = 1
+                end
+            end
+        end
+    end)
+    
+    print("[FPS Boost] Applied:", preset.Name)
+    print("[FPS Boost] Description:", preset.Description)
+end
+
+--// Restore Original Settings
+local function RestoreFPSBoost()
+    if not Settings.FPSBoost.Enabled then return end
+    
+    pcall(function()
+        GameSettings.GraphicsMode = OriginalFPSSettings.GraphicsMode
+        GameSettings.RenderDistance = OriginalFPSSettings.RenderDistance
+        GameSettings.VSync = OriginalFPSSettings.VSync
+    end)
+    
+    pcall(function()
+        Lighting.GlobalShadows = OriginalFPSSettings.GlobalShadows
+        Lighting.Technology = OriginalFPSSettings.Technology
+        Lighting.Brightness = OriginalFPSSettings.Brightness
+        Lighting.Ambient = OriginalFPSSettings.Ambient
+    end)
+    
+    Settings.FPSBoost.Enabled = false
+    print("[FPS Boost] Restored to original settings")
+end
+
+--// Drawing Utility
+local Drawing = Drawing
+if not Drawing then
+    warn("Drawing library not available")
+    return
+end
+
+local function SafeDrawing(Type, Props)
+    if not Drawing or not Type then return nil end
+    local success, obj = pcall(function() return Drawing.new(Type) end)
+    if not success or not obj then return nil end
+    if Props and typeof(Props) == "table" then
+        for k, v in pairs(Props) do
+            pcall(function() obj[k] = v end)
+        end
+    end
+    return obj
+end
+
+--// Skeleton Maps
+local BoneMap = {
+    R15 = {
+        Head = "Head", Neck = "UpperTorso", Spine = "LowerTorso",
+        LeftShoulder = "LeftUpperArm", LeftElbow = "LeftLowerArm", LeftHand = "LeftHand",
+        RightShoulder = "RightUpperArm", RightElbow = "RightLowerArm", RightHand = "RightHand",
+        LeftHip = "LeftUpperLeg", LeftKnee = "LeftLowerLeg", LeftFoot = "LeftFoot",
+        RightHip = "RightUpperLeg", RightKnee = "RightLowerLeg", RightFoot = "RightFoot"
+    },
+    R6 = {
+        Head = "Head", Neck = "Torso", Spine = "Torso",
+        LeftShoulder = "Left Arm", LeftElbow = "Left Arm", LeftHand = "Left Arm",
+        RightShoulder = "Right Arm", RightElbow = "Right Arm", RightHand = "Right Arm",
+        LeftHip = "Left Leg", LeftKnee = "Left Leg", LeftFoot = "Left Leg",
+        RightHip = "Right Leg", RightKnee = "Right Leg", RightFoot = "Right Leg"
+    }
+}
+
+local SkeletonConnections = {
+    {"Head", "Neck"}, {"Neck", "Spine"},
+    {"Neck", "LeftShoulder"}, {"LeftShoulder", "LeftElbow"}, {"LeftElbow", "LeftHand"},
+    {"Neck", "RightShoulder"}, {"RightShoulder", "RightElbow"}, {"RightElbow", "RightHand"},
+    {"Spine", "LeftHip"}, {"LeftHip", "LeftKnee"}, {"LeftKnee", "LeftFoot"},
+    {"Spine", "RightHip"}, {"RightHip", "RightKnee"}, {"RightKnee", "RightFoot"}
+}
+
+--// Core Functions
+local function WorldToViewportSafe(pos)
+    if not pos or typeof(pos) ~= "Vector3" then return nil, nil, nil, false end
+    if not Camera then return nil, nil, nil, false end
+    local success, result = pcall(function() return Camera:WorldToViewportPoint(pos) end)
+    if success and result and typeof(result) == "Vector3" then
+        return result.X, result.Y, result.Z, true
+    end
+    return nil, nil, nil, false
+end
+
+local function IsTargetValid(player, character)
+    if not player or player == LocalPlayer then return false end
+    if not character or typeof(character) ~= "Instance" then return false end
+    if not character.Parent then return false end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return false end
+    if Settings.TeamCheck then
+        local success, sameTeam = pcall(function() return player.Team == LocalPlayer.Team end)
+        if success and sameTeam then return false end
+    end
+    return true
+end
+
+local function IsVisible(targetPos, targetChar)
+    if not targetPos or typeof(targetPos) ~= "Vector3" then return false end
+    if not targetChar or typeof(targetChar) ~= "Instance" then return false end
+    if not Camera then return false end
+    local origin = Camera.CFrame.Position
+    local direction = targetPos - origin
+    local distance = direction.Magnitude
+    if distance > Settings.MaxDistance or distance <= 0 then return false end
+    direction = direction.Unit * distance
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = {LocalPlayer.Character, targetChar}
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    params.IgnoreWater = true
+    local success, result = pcall(function() return workspace:Raycast(origin, direction, params) end)
+    if not success then return false end
+    return result == nil
+end
+
+local function CalculateSmoothing(distance)
+    if not distance or typeof(distance) ~= "number" or distance <= 0 then
+        return Settings.Smoothing
+    end
+    local factor = math.clamp(distance / Settings.MaxDistance, 0, 1)
+    return math.clamp(Settings.Smoothing * (1 - factor) * 3, 0.02, 0.3)
+end
+
+local function GetCharacterType(char)
+    if not char or typeof(char) ~= "Instance" then return nil end
+    if char:FindFirstChild("UpperTorso") then return "R15"
+    elseif char:FindFirstChild("Torso") then return "R6"
+    end
+    return nil
+end
+
+--// Cleanup
+local function Cleanup(player)
+    if not player or typeof(player) ~= "Instance" then return end
+    if PlayerConnections[player] then
+        for _, conn in ipairs(PlayerConnections[player]) do
+            if conn and typeof(conn) == "RBXScriptConnection" then
+                pcall(function() conn:Disconnect() end)
+            end
+        end
+        PlayerConnections[player] = nil
+    end
+    if ESPObjects[player] then
+        for key, obj in pairs(ESPObjects[player]) do
+            if key == "Skeleton" and type(obj) == "table" then
+                for _, line in pairs(obj) do
+                    if line and typeof(line) == "table" and line.Remove then
+                        pcall(function() line:Remove() end)
+                    end
+                end
+            elseif obj and typeof(obj) == "table" and obj.Remove then
+                pcall(function() obj:Remove() end)
+            end
+        end
+        ESPObjects[player] = nil
+    end
+end
+
+--// ESP System
+local FOVCircle = SafeDrawing("Circle", {
+    Thickness = 1.5, NumSides = 64, Radius = Settings.FOV,
+    Filled = false, Visible = false, ZIndex = 1, Transparency = 1,
+    Color = Color3.fromRGB(255, 255, 255)
+})
+
+local function CreateESPObjects()
+    local vis = {
+        Box = SafeDrawing("Square", {Thickness = 1, Color = Color3.fromRGB(255, 50, 50), ZIndex = 2}),
+        BoxOutline = SafeDrawing("Square", {Thickness = 3, Color = Color3.fromRGB(0, 0, 0), ZIndex = 1}),
+        HealthBar = SafeDrawing("Line", {Thickness = 2, ZIndex = 3}),
+        HealthBarOutline = SafeDrawing("Line", {Thickness = 4, Color = Color3.fromRGB(0, 0, 0), ZIndex = 2}),
+        Name = SafeDrawing("Text", {Size = 13, Center = true, Outline = true, Color = Color3.fromRGB(255, 255, 255), ZIndex = 4}),
+        Distance = SafeDrawing("Text", {Size = 11, Center = true, Outline = true, Color = Color3.fromRGB(200, 200, 200), ZIndex = 4}),
+        Skeleton = {}
+    }
+    if not vis.Box then
+        warn("ESP Box creation failed")
+        return nil
+    end
+    return vis
+end
+
+local function InitSkeleton(vis)
+    if not vis or type(vis) ~= "table" then return end
+    if not vis.Skeleton then vis.Skeleton = {} end
+    for _, conn in ipairs(SkeletonConnections) do
+        local line = SafeDrawing("Line", {Thickness = 1, Color = Color3.fromRGB(255, 255, 255), ZIndex = 2})
+        if line then
+            vis.Skeleton[conn[1] .. "_" .. conn[2]] = line
+        end
+    end
+end
+
+local function SetVisibility(vis, state)
+    if not vis or type(vis) ~= "table" then return end
+    for key, obj in pairs(vis) do
+        if key == "Skeleton" and type(obj) == "table" then
+            for _, line in pairs(obj) do
+                if line and line.Visible ~= nil then line.Visible = state end
+            end
+        elseif obj and obj.Visible ~= nil then
+            obj.Visible = state
+        end
+    end
+end
+
+local function UpdateESP(player, vis)
+    if not player or typeof(player) ~= "Instance" then return end
+    if not vis or type(vis) ~= "table" then return end
+    local char = player.Character
+    if not IsTargetValid(player, char) or not Settings.Enabled then
+        SetVisibility(vis, false)
+        return
+    end
+    local focusedTextBox = nil
+    pcall(function() focusedTextBox = UIS:GetFocusedTextBox() end)
+    if focusedTextBox then
+        SetVisibility(vis, false)
+        return
+    end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local head = char:FindFirstChild("Head")
+    if not hrp or not head then
+        SetVisibility(vis, false)
+        return
+    end
+    local posX, posY, posZ, onScreen = WorldToViewportSafe(hrp.Position)
+    if not onScreen or not posX or not posY or not posZ or posZ <= 0 then
+        SetVisibility(vis, false)
+        return
+    end
+    local distance = posZ
+    local sizeX = math.clamp(2500 / distance, 20, 200)
+    local sizeY = math.clamp(3500 / distance, 30, 280)
+    local topLeft = Vector2.new(posX - sizeX/2, posY - sizeY/2)
+    local bottomRight = Vector2.new(posX + sizeX/2, posY + sizeY/2)
+    
+    -- Box
+    if Settings.Visuals.Boxes and vis.Box then
+        vis.Box.Size = Vector2.new(sizeX, sizeY)
+        vis.Box.Position = topLeft
+        vis.Box.Visible = true
+        if Settings.Visuals.Outlines and vis.BoxOutline then
+            vis.BoxOutline.Size = Vector2.new(sizeX + 2, sizeY + 2)
+            vis.BoxOutline.Position = Vector2.new(topLeft.X - 1, topLeft.Y - 1)
+            vis.BoxOutline.Visible = true
+        elseif vis.BoxOutline then
+            vis.BoxOutline.Visible = false
+        end
+    else
+        if vis.Box then vis.Box.Visible = false end
+        if vis.BoxOutline then vis.BoxOutline.Visible = false end
+    end
+    
+    -- Health
+    if Settings.Visuals.HealthBar then
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if humanoid and vis.HealthBar and vis.HealthBarOutline then
+            local maxHealth = humanoid.MaxHealth
+            if maxHealth and maxHealth > 0 then
+                local healthPercent = math.clamp(humanoid.Health / maxHealth, 0, 1)
+                local barHeight = sizeY * healthPercent
+                local barX = topLeft.X - 8
+                vis.HealthBarOutline.From = Vector2.new(barX, topLeft.Y)
+                vis.HealthBarOutline.To = Vector2.new(barX, bottomRight.Y)
+                vis.HealthBarOutline.Visible = true
+                vis.HealthBar.From = Vector2.new(barX, bottomRight.Y)
+                vis.HealthBar.To = Vector2.new(barX, bottomRight.Y - barHeight)
+                vis.HealthBar.Color = Color3.fromHSV(healthPercent * 0.3, 1, 1)
+                vis.HealthBar.Visible = true
+            end
+        end
+    else
+        if vis.HealthBar then vis.HealthBar.Visible = false end
+        if vis.HealthBarOutline then vis.HealthBarOutline.Visible = false end
+    end
+    
+    -- Name
+    if Settings.Visuals.Names and vis.Name then
+        local playerName = player.Name
+        if playerName then
+            vis.Name.Position = Vector2.new(posX, topLeft.Y - 18)
+            vis.Name.Text = tostring(playerName)
+            vis.Name.Visible = true
+        end
+    elseif vis.Name then
+        vis.Name.Visible = false
+    end
+    
+    -- Distance
+    if Settings.Visuals.Distance and vis.Distance then
+        vis.Distance.Position = Vector2.new(posX, bottomRight.Y + 4)
+        vis.Distance.Text = string.format("[%dm]", math.floor(distance))
+        vis.Distance.Visible = true
+    elseif vis.Distance then
+        vis.Distance.Visible = false
+    end
+    
+    -- Skeleton
+    if Settings.Visuals.Skeletons then
+        local charType = GetCharacterType(char)
+        if charType and BoneMap[charType] then
+            local map = BoneMap[charType]
+            for _, conn in ipairs(SkeletonConnections) do
+                local line = vis.Skeleton[conn[1] .. "_" .. conn[2]]
+                if line then
+                    local part1Name = map[conn[1]]
+                    local part2Name = map[conn[2]]
+                    if part1Name and part2Name then
+                        local part1 = char:FindFirstChild(part1Name)
+                        local part2 = char:FindFirstChild(part2Name)
+                        if part1 and part2 then
+                            local x1, y1, _, v1 = WorldToViewportSafe(part1.Position)
+                            local x2, y2, _, v2 = WorldToViewportSafe(part2.Position)
+                            if v1 and v2 and x1 and x2 and y1 and y2 then
+                                line.From = Vector2.new(x1, y1)
+                                line.To = Vector2.new(x2, y2)
+                                line.Visible = true
+                            else
+                                line.Visible = false
+                            end
+                        else
+                            line.Visible = false
+                        end
+                    end
+                end
+            end
+        end
+    else
+        for _, line in pairs(vis.Skeleton or {}) do
+            if line then line.Visible = false end
+        end
+    end
+end
+
+--// Aimbot
+local function GetBestTarget()
+    if not Camera then return nil end
+    local bestTarget = nil
+    local closestFOV = Settings.FOV
+    local viewportSize = Camera.ViewportSize
+    if not viewportSize or viewportSize.X <= 0 or viewportSize.Y <= 0 then return nil end
+    local screenCenter = Vector2.new(viewportSize.X/2, viewportSize.Y/2)
+    for _, player in ipairs(Players:GetPlayers()) do
+        if not player or typeof(player) ~= "Instance" then continue end
+        if not IsTargetValid(player, player.Character) then continue end
+        local head = player.Character:FindFirstChild("Head")
+        if not head then continue end
+        local posX, posY, _, onScreen = WorldToViewportSafe(head.Position)
+        if not onScreen or not posX or not posY then continue end
+        local dist = (Vector2.new(posX, posY) - screenCenter).Magnitude
+        if dist > closestFOV then continue end
+        if not IsVisible(head.Position, player.Character) then continue end
+        closestFOV = dist
+        bestTarget = player
+    end
+    return bestTarget
+end
+
+--// Player Management
+local function OnPlayerAdded(player)
+    if not player or typeof(player) ~= "Instance" or player == LocalPlayer then return end
+    Cleanup(player)
+    local function setupCharacter(char)
+        task.wait(0.5)
+        if not player or not player.Parent then return end
+        if not char or not char.Parent then return end
+        Cleanup(player)
+        local vis = CreateESPObjects()
+        if vis then
+            InitSkeleton(vis)
+            ESPObjects[player] = vis
+        end
+    end
+    if player.Character then
+        task.spawn(function() setupCharacter(player.Character) end)
+    end
+    local charAddedConn = nil
+    local charRemovingConn = nil
+    pcall(function()
+        charAddedConn = player.CharacterAdded:Connect(setupCharacter)
+        charRemovingConn = player.CharacterRemoving:Connect(function() Cleanup(player) end)
+    end)
+    PlayerConnections[player] = {charAddedConn, charRemovingConn}
+end
+
+--// Login System
+local function CreateLoginUI()
+    local attemptCount = 0
+    local isLocked = false
+    local LoginGui = Instance.new("ScreenGui")
+    LoginGui.Name = "ParagonSecurity"
+    LoginGui.ResetOnSpawn = false
+    LoginGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    local parentSuccess = false
+    pcall(function()
+        LoginGui.Parent = game:GetService("CoreGui")
+        parentSuccess = true
+    end)
+    if not parentSuccess then
+        pcall(function() LoginGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end)
+    end
+    if not LoginGui.Parent then
+        warn("Failed to parent LoginGui")
+        return
+    end
+    
+    local Main = Instance.new("Frame", LoginGui)
+    Main.BackgroundColor3 = Color3.fromRGB(15, 15, 30)
+    Main.BorderSizePixel = 0
+    Main.Position = UDim2.new(0.5, -160, 0.5, -100)
+    Main.Size = UDim2.new(0, 320, 0, 200)
+    Main.Active = true
+    Main.Draggable = true
+    Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
+    
+    local Header = Instance.new("Frame", Main)
+    Header.Size = UDim2.new(1, 0, 0, 45)
+    Header.BackgroundColor3 = Color3.fromRGB(25, 25, 50)
+    Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 12)
+    
+    local Title = Instance.new("TextLabel", Header)
+    Title.Size = UDim2.new(1, -20, 1, 0)
+    Title.Position = UDim2.new(0, 10, 0, 0)
+    Title.BackgroundTransparency = 1
+    Title.Text = "🔒 PARAGON ACCESS"
+    Title.TextColor3 = Color3.fromRGB(100, 150, 255)
+    Title.TextSize = 18
+    Title.Font = Enum.Font.GothamBold
+    Title.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local AttemptsLabel = Instance.new("TextLabel", Main)
+    AttemptsLabel.Size = UDim2.new(1, 0, 0, 20)
+    AttemptsLabel.Position = UDim2.new(0, 0, 0.28, 0)
+    AttemptsLabel.BackgroundTransparency = 1
+    AttemptsLabel.Text = "Attempts: 0 / " .. Settings.Security.MaxAttempts
+    AttemptsLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    AttemptsLabel.TextSize = 12
+    AttemptsLabel.Font = Enum.Font.Gotham
+    
+    local InputFrame = Instance.new("Frame", Main)
+    InputFrame.Size = UDim2.new(0.85, 0, 0, 40)
+    InputFrame.Position = UDim2.new(0.075, 0, 0.42, 0)
+    InputFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+    Instance.new("UICorner", InputFrame).CornerRadius = UDim.new(0, 8)
+    
+    local Box = Instance.new("TextBox", InputFrame)
+    Box.Size = UDim2.new(1, -20, 1, 0)
+    Box.Position = UDim2.new(0, 10, 0, 0)
+    Box.BackgroundTransparency = 1
+    Box.PlaceholderText = "Enter Access Key..."
+    Box.Text = ""
+    Box.TextColor3 = Color3.new(1, 1, 1)
+    Box.PlaceholderColor3 = Color3.fromRGB(150, 150, 150)
+    Box.Font = Enum.Font.Gotham
+    Box.TextSize = 14
+    Box.ClearTextOnFocus = false
+    
+    local Btn = Instance.new("TextButton", Main)
+    Btn.Text = "AUTHENTICATE"
+    Btn.Size = UDim2.new(0.85, 0, 0, 40)
+    Btn.Position = UDim2.new(0.075, 0, 0.68, 0)
+    Btn.BackgroundColor3 = Color3.fromRGB(40, 60, 150)
+    Btn.TextColor3 = Color3.new(1, 1, 1)
+    Btn.Font = Enum.Font.GothamBold
+    Btn.TextSize = 14
+    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 8)
+    
+    local Status = Instance.new("TextLabel", Main)
+    Status.Size = UDim2.new(1, 0, 0, 20)
+    Status.Position = UDim2.new(0, 0, 0.88, 0)
+    Status.BackgroundTransparency = 1
+    Status.Text = ""
+    Status.TextColor3 = Color3.fromRGB(255, 100, 100)
+    Status.TextSize = 12
+    Status.Font = Enum.Font.Gotham
+    
+    local function UpdateStatus(msg, color)
+        if not Status or not Status.Parent then return end
+        Status.Text = tostring(msg or "")
+        Status.TextColor3 = color or Color3.fromRGB(255, 100, 100)
+    end
+    
+    local function ShakeUI()
+        if not Main or not Main.Parent then return end
+        local originalPos = Main.Position
+        for i = 1, 5 do
+            if not Main or not Main.Parent then return end
+            Main.Position = originalPos + UDim2.new(0, math.random(-10, 10), 0, 0)
+            task.wait(0.05)
+        end
+        if Main and Main.Parent then Main.Position = originalPos end
+    end
+    
+    local function AttemptLogin()
+        if not Main or not Main.Parent then return end
+        if isLocked then
+            UpdateStatus("Locked! Wait " .. Settings.Security.LockoutTime .. "s", Color3.fromRGB(255, 150, 50))
+            return
+        end
+        if Box.Text == Settings.Security.AdminKey then
+            UpdateStatus("Access Granted!", Color3.fromRGB(100, 255, 100))
+            local tween = nil
+            pcall(function()
+                tween = TweenService:Create(Main, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(0, 0, 0, 0)})
+                tween:Play()
+            end)
+            if tween then
+                pcall(function() tween.Completed:Wait() end)
+            else
+                task.wait(0.5)
+            end
+            pcall(function() LoginGui:Destroy() end)
+            Whitelisted = true
+        else
+            attemptCount += 1
+            AttemptsLabel.Text = "Attempts: " .. attemptCount .. " / " .. Settings.Security.MaxAttempts
+            Box.Text = ""
+            ShakeUI()
+            UpdateStatus("Invalid key!")
+            if attemptCount >= Settings.Security.MaxAttempts then
+                isLocked = true
+                Btn.BackgroundColor3 = Color3.fromRGB(100, 30, 30)
+                Btn.Text = "LOCKED"
+                UpdateStatus("Too many attempts!", Color3.fromRGB(255, 50, 50))
+                task.delay(Settings.Security.LockoutTime, function()
+                    if not Main or not Main.Parent then return end
+                    isLocked = false
+                    attemptCount = 0
+                    Btn.BackgroundColor3 = Color3.fromRGB(40, 60, 150)
+                    Btn.Text = "AUTHENTICATE"
+                    AttemptsLabel.Text = "Attempts: 0 / " .. Settings.Security.MaxAttempts
+                    UpdateStatus("")
+                end)
+            end
+        end
+    end
+    
+    Btn.MouseButton1Click:Connect(AttemptLogin)
+    Box.FocusLost:Connect(function(enterPressed)
+        if enterPressed then AttemptLogin() end
+    end)
+end
+
+--// FPS Boost UI (NEW — 3 Tiers)
+local function CreateFPSBoostUI(parent)
+    if not parent then return end
+    
+    local FPSFrame = Instance.new("Frame", parent)
+    FPSFrame.Name = "FPSBoostPanel"
+    FPSFrame.Size = UDim2.new(1, 0, 0, 200)
+    FPSFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+    FPSFrame.BorderSizePixel = 0
+    Instance.new("UICorner", FPSFrame).CornerRadius = UDim.new(0, 10)
+    
+    local Title = Instance.new("TextLabel", FPSFrame)
+    Title.Size = UDim2.new(1, 0, 0, 30)
+    Title.BackgroundTransparency = 1
+    Title.Text = "🚀 FPS BOOST"
+    Title.TextColor3 = Color3.fromRGB(100, 255, 100)
+    Title.TextSize = 16
+    Title.Font = Enum.Font.GothamBold
+    
+    local Desc = Instance.new("TextLabel", FPSFrame)
+    Desc.Size = UDim2.new(1, -20, 0, 20)
+    Desc.Position = UDim2.new(0, 10, 0, 30)
+    Desc.BackgroundTransparency = 1
+    Desc.Text = "Select your PC tier for optimal performance"
+    Desc.TextColor3 = Color3.fromRGB(200, 200, 200)
+    Desc.TextSize = 11
+    Desc.Font = Enum.Font.Gotham
+    Desc.TextXAlignment = Enum.TextXAlignment.Left
+    
+    -- Tier Buttons
+    local tiers = {"Low", "Medium", "High"}
+    local colors = {
+        Low = Color3.fromRGB(255, 100, 100),    -- Red (weak)
+        Medium = Color3.fromRGB(255, 200, 100), -- Yellow (mid)
+        High = Color3.fromRGB(100, 255, 100)    -- Green (strong)
+    }
+    
+    for i, tier in ipairs(tiers) do
+        local btn = Instance.new("TextButton", FPSFrame)
+        btn.Name = tier .. "Tier"
+        btn.Size = UDim2.new(0.3, -10, 0, 50)
+        btn.Position = UDim2.new((i-1) * 0.333, 5, 0.35, 0)
+        btn.BackgroundColor3 = colors[tier]
+        btn.Text = FPSPresets[tier].Name .. "\n" .. FPSPresets[tier].Description
+        btn.TextColor3 = Color3.new(0, 0, 0)
+        btn.TextSize = 10
+        btn.Font = Enum.Font.GothamBold
+        btn.TextWrapped = true
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+        
+        btn.MouseButton1Click:Connect(function()
+            -- Reset all buttons
+            for _, t in ipairs(tiers) do
+                local b = FPSFrame:FindFirstChild(t .. "Tier")
+                if b then b.BackgroundTransparency = 0 end
+            end
+            btn.BackgroundTransparency = 0.3
+            
+            -- Apply boost
+            SaveOriginalSettings()
+            ApplyFPSBoost(tier)
+        end)
+    end
+    
+    -- Restore Button
+    local RestoreBtn = Instance.new("TextButton", FPSFrame)
+    RestoreBtn.Size = UDim2.new(0.9, 0, 0, 30)
+    RestoreBtn.Position = UDim2.new(0.05, 0, 0.7, 0)
+    RestoreBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+    RestoreBtn.Text = "↩ RESTORE DEFAULTS"
+    RestoreBtn.TextColor3 = Color3.new(1, 1, 1)
+    RestoreBtn.TextSize = 12
+    RestoreBtn.Font = Enum.Font.GothamBold
+    Instance.new("UICorner", RestoreBtn).CornerRadius = UDim.new(0, 6)
+    
+    RestoreBtn.MouseButton1Click:Connect(function()
+        RestoreFPSBoost()
+        for _, t in ipairs(tiers) do
+            local b = FPSFrame:FindFirstChild(t .. "Tier")
+            if b then b.BackgroundTransparency = 0 end
+        end
+    end)
+    
+    -- Status Label
+    local Status = Instance.new("TextLabel", FPSFrame)
+    Status.Name = "FPSStatus"
+    Status.Size = UDim2.new(1, 0, 0, 20)
+    Status.Position = UDim2.new(0, 0, 0.88, 0)
+    Status.BackgroundTransparency = 1
+    Status.Text = "Current: Default Settings"
+    Status.TextColor3 = Color3.fromRGB(200, 200, 200)
+    Status.TextSize = 11
+    Status.Font = Enum.Font.Gotham
+    
+    return FPSFrame
+end
+
+--// FOV Input UI (NEW — Keyboard Support 60-175)
+local function CreateFOVInputUI(parent)
+    if not parent then return end
+    
+    local FOVFrame = Instance.new("Frame", parent)
+    FOVFrame.Name = "FOVPanel"
+    FOVFrame.Size = UDim2.new(1, 0, 0, 120)
+    FOVFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+    FOVFrame.BorderSizePixel = 0
+    Instance.new("UICorner", FOVFrame).CornerRadius = UDim.new(0, 10)
+    
+    local Title = Instance.new("TextLabel", FOVFrame)
+    Title.Size = UDim2.new(1, 0, 0, 30)
+    Title.BackgroundTransparency = 1
+    Title.Text = "🎯 FOV CONFIGURATION"
+    Title.TextColor3 = Color3.fromRGB(100, 150, 255)
+    Title.TextSize = 16
+    Title.Font = Enum.Font.GothamBold
+    
+    -- Current FOV Display
+    local CurrentFOV = Instance.new("TextLabel", FOVFrame)
+    CurrentFOV.Name = "CurrentFOV"
+    CurrentFOV.Size = UDim2.new(0.3, 0, 0, 30)
+    CurrentFOV.Position = UDim2.new(0.05, 0, 0.3, 0)
+    CurrentFOV.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+    CurrentFOV.Text = tostring(Settings.FOV)
+    CurrentFOV.TextColor3 = Color3.new(1, 1, 1)
+    CurrentFOV.TextSize = 18
+    CurrentFOV.Font = Enum.Font.GothamBold
+    Instance.new("UICorner", CurrentFOV).CornerRadius = UDim.new(0, 6)
+    
+    -- Input Box (Keyboard Entry)
+    local InputBox = Instance.new("TextBox", FOVFrame)
+    InputBox.Name = "FOVInput"
+    InputBox.Size = UDim2.new(0.4, 0, 0, 30)
+    InputBox.Position = UDim2.new(0.4, 0, 0.3, 0)
+    InputBox.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+    InputBox.PlaceholderText = "60-175..."
+    InputBox.Text = ""
+    InputBox.TextColor3 = Color3.new(1, 1, 1)
+    InputBox.PlaceholderColor3 = Color3.fromRGB(150, 150, 150)
+    InputBox.Font = Enum.Font.Gotham
+    InputBox.TextSize = 14
+    InputBox.ClearTextOnFocus = true
+    Instance.new("UICorner", InputBox).CornerRadius = UDim.new(0, 6)
+    
+    -- Apply Button
+    local ApplyBtn = Instance.new("TextButton", FOVFrame)
+    ApplyBtn.Size = UDim2.new(0.15, 0, 0, 30)
+    ApplyBtn.Position = UDim2.new(0.82, 0, 0.3, 0)
+    ApplyBtn.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+    ApplyBtn.Text = "SET"
+    ApplyBtn.TextColor3 = Color3.new(1, 1, 1)
+    ApplyBtn.Font = Enum.Font.GothamBold
+    ApplyBtn.TextSize = 12
+    Instance.new("UICorner", ApplyBtn).CornerRadius = UDim.new(0, 6)
+    
+    -- Slider (Visual)
+    local SliderFrame = Instance.new("Frame", FOVFrame)
+    SliderFrame.Size = UDim2.new(0.9, 0, 0, 20)
+    SliderFrame.Position = UDim2.new(0.05, 0, 0.65, 0)
+    SliderFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+    Instance.new("UICorner", SliderFrame).CornerRadius = UDim.new(0, 4)
+    
+    local SliderFill = Instance.new("Frame", SliderFrame)
+    SliderFill.Name = "Fill"
+    SliderFill.Size = UDim2.new((Settings.FOV - 60) / (175 - 60), 0, 1, 0)
+    SliderFill.BackgroundColor3 = Color3.fromRGB(100, 150, 255)
+    SliderFill.BorderSizePixel = 0
+    Instance.new("UICorner", SliderFill).CornerRadius = UDim.new(0, 4)
+    
+    -- Range Labels
+    local MinLabel = Instance.new("TextLabel", FOVFrame)
+    MinLabel.Size = UDim2.new(0, 30, 0, 15)
+    MinLabel.Position = UDim2.new(0.05, 0, 0.85, 0)
+    MinLabel.BackgroundTransparency = 1
+    MinLabel.Text = "60"
+    MinLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+    MinLabel.TextSize = 10
+    
+    local MaxLabel = Instance.new("TextLabel", FOVFrame)
+    MaxLabel.Size = UDim2.new(0, 30, 0, 15)
+    MaxLabel.Position = UDim2.new(0.85, 0, 0.85, 0)
+    MaxLabel.BackgroundTransparency = 1
+    MaxLabel.Text = "175"
+    MaxLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+    MaxLabel.TextSize = 10
+    
+    -- Validation & Apply Function
+    local function ApplyFOV(value)
+        local num = tonumber(value)
+        if not num then
+            InputBox.Text = ""
+            InputBox.PlaceholderText = "Numbers only!"
+            return false
+        end
+        
+        num = math.clamp(math.floor(num), 60, 175)
+        Settings.FOV = num
+        
+        -- Update UI
+        CurrentFOV.Text = tostring(num)
+        InputBox.Text = ""
+        InputBox.PlaceholderText = "Applied: " .. num
+        
+        -- Update Slider
+        local fillPercent = (num - 60) / (175 - 60)
+        SliderFill.Size = UDim2.new(fillPercent, 0, 1, 0)
+        
+        -- Update FOV Circle
+        if FOVCircle then
+            FOVCircle.Radius = num
+        end
+        
+        print("[FOV] Set to:", num)
+        return true
+    end
+    
+    ApplyBtn.MouseButton1Click:Connect(function()
+        ApplyFOV(InputBox.Text)
+    end)
+    
+    InputBox.FocusLost:Connect(function(enterPressed)
+        if enterPressed then
+            ApplyFOV(InputBox.Text)
+        end
+    end)
+    
+    -- Keyboard Shortcuts (Numpad +/-)
+    UIS.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        if input.KeyCode == Enum.KeyCode.KeypadPlus then
+            ApplyFOV(Settings.FOV + 5)
+        elseif input.KeyCode == Enum.KeyCode.KeypadMinus then
+            ApplyFOV(Settings.FOV - 5)
+        end
+    end)
+    
+    return FOVFrame
+end
+
+--// Main Loop
+RunService.RenderStepped:Connect(function()
+    if not ScriptEnabled then return end
+    
+    if FOVCircle then
+        local viewportSize = Camera and Camera.ViewportSize
+        if viewportSize and viewportSize.X > 0 and viewportSize.Y > 0 then
+            FOVCircle.Position = Vector2.new(viewportSize.X/2, viewportSize.Y/2)
+            FOVCircle.Radius = Settings.FOV
+            
+            local focused = nil
+            pcall(function() focused = UIS:GetFocusedTextBox() end)
+            FOVCircle.Visible = Settings.Enabled and Settings.ShowFOV and not focused
+        end
+    end
+    
+    local toCleanup = {}
+    for player, vis in pairs(ESPObjects) do
+        if not player or typeof(player) ~= "Instance" or not player.Parent then
+            SetVisibility(vis, false)
+            table.insert(toCleanup, player)
+        else
+            UpdateESP(player, vis)
+        end
+    end
+    for _, player in ipairs(toCleanup) do Cleanup(player) end
+    
+    if Settings.Enabled then
+        local focused = nil
+        pcall(function() focused = UIS:GetFocusedTextBox() end)
+        if not focused then
+            local target = GetBestTarget()
+            if target and target.Character then
+                local head = target.Character:FindFirstChild("Head")
+                local hrp = target.Character:FindFirstChild("HumanoidRootPart")
+                if head and hrp then
+                    local headPos = head.Position
+                    local hrpPos = hrp.Position
+                    if headPos and hrpPos then
+                        local distance = (headPos - Camera.CFrame.Position).Magnitude
+                        local smooth = CalculateSmoothing(distance)
+                        local targetPos = headPos
+                        local velocity = nil
+                        pcall(function()
+                            if hrp:IsA("BasePart") then
+                                velocity = hrp.AssemblyLinearVelocity
+                            end
+                        end)
+                        if velocity and typeof(velocity) == "Vector3" and velocity.Magnitude > 0 then
+                            targetPos = targetPos + (velocity * Settings.Prediction)
+                        end
+                        local camPos = Camera.CFrame.Position
+                        if camPos and targetPos then
+                            local targetCF = CFrame.new(camPos, targetPos)
+                            Camera.CFrame = Camera.CFrame:Lerp(targetCF, smooth)
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+--// Initialize
+SaveOriginalSettings()
+CreateLoginUI()
+
+local timeout = 0
+repeat
+    task.wait(0.1)
+    timeout += 0.1
+    if timeout > 300 then
+        warn("Login timeout")
+        ScriptEnabled = false
+        return
+    end
+    if not ScriptEnabled then return end
+until Whitelisted
+
+-- Create Main UI Panel (after login)
+local MainPanel = Instance.new("Frame")
+MainPanel.Name = "ParagonMainPanel"
+MainPanel.Size = UDim2.new(0, 350, 0, 500)
+MainPanel.Position = UDim2.new(0.5, -175, 0.5, -250)
+MainPanel.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
+MainPanel.BorderSizePixel = 0
+MainPanel.Active = true
+MainPanel.Draggable = true
+
+local panelParent = nil
+pcall(function() panelParent = game:GetService("CoreGui") end)
+if not panelParent then
+    pcall(function() panelParent = LocalPlayer:WaitForChild("PlayerGui") end)
+end
+if panelParent then
+    MainPanel.Parent = panelParent
+end
+
+Instance.new("UICorner", MainPanel).CornerRadius = UDim.new(0, 12)
+
+-- Add FPS Boost UI
+CreateFPSBoostUI(MainPanel)
+
+-- Add FOV Input UI (below FPS)
+local fovUI = CreateFOVInputUI(MainPanel)
+if fovUI then
+    fovUI.Position = UDim2.new(0, 0, 0, 210)
+end
+
+-- Initialize Players
+for _, player in ipairs(Players:GetPlayers()) do
+    OnPlayerAdded(player)
+end
+
+Players.PlayerAdded:Connect(OnPlayerAdded)
+Players.PlayerRemoving:Connect(function(player) Cleanup(player) end)
+
+-- Keybind
+UIS.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if not input or typeof(input) ~= "Instance" then return end
+    if not input.KeyCode then return end
+    if typeof(input.KeyCode) ~= "EnumItem" then return end
+    if input.KeyCode.EnumType ~= Enum.KeyCode then return end
+    if input.KeyCode == Settings.Key then
+        Settings.Enabled = not Settings.Enabled
+        print("[PARAGON] Enabled:", Settings.Enabled)
+    end
+end)
+
+print("[PARAGON V15 FPS Boost] Loaded Successfully")
